@@ -109,7 +109,25 @@ public static class MouseInput
 # 設定
 # ============================================================
 
-$mutexName     = "Local\MouseMoveToggle_Mutex"
+# マウス移動を発動1回当たり何回繰り返すか
+$MoveRepeatCount = 1
+
+# 1回の移動後、元に戻すまでの待機時間（ミリ秒）
+# Default: 8ms待機(120fps表示時の1フレーム秒=8.333...ms未満)
+$MoveReturnDelayMs = 8
+
+# 次の発動までの待機時間（秒）=発動終了から次の発動までの待機時間
+$MainIntervalSeconds = 60
+
+# 1回あたりの移動量（ピクセル）
+$MovePixels = 1
+
+# 多重起動防止用のMutex名
+# 同じ名前のMutexがすでに存在する場合は、このスクリプトがすでに起動していると判定する
+$mutexName = "Local\MouseMoveToggle_Mutex"
+
+# 実行中のスクリプトへ停止要求を送るためのイベント名
+# 2回目の起動時にこのイベントをセットすることで、先に起動しているスクリプトを終了させる
 $stopEventName = "Local\MouseMoveToggle_StopEvent"
 
 # ============================================================
@@ -236,8 +254,8 @@ try {
         # ----------------------------------------------------
 
         do {
-            $DX = Get-Random -Minimum -1 -Maximum 2
-            $DY = Get-Random -Minimum -1 -Maximum 2
+            $DX = (Get-Random -Minimum -1 -Maximum 2) * $MovePixels
+            $DY = (Get-Random -Minimum -1 -Maximum 2) * $MovePixels
         }
         while (($DX -eq 0) -and ($DY -eq 0))
 
@@ -249,10 +267,10 @@ try {
 
         # ----------------------------------------------------
         # マウス入力を発生
-        # 1回 × 8ms
+        # 1回 × $MoveReturnDelayMs ms
         # ----------------------------------------------------
 
-        for ($I = 0; $I -lt 1; $I++) {
+        for ($I = 0; $I -lt $MoveRepeatCount; $I++) {
 
             # 停止要求チェック
             if ($stopEvent.WaitOne(0)) {
@@ -271,11 +289,11 @@ try {
             # 実際にマウスポインターを移動（マウスインプット）
             [MouseInput]::Move($DX, $DY)
 
-            # 8ms待機(約120fps時の1フレーム秒)
+            # $MoveReturnDelayMs ms待機
             #
             # Start-SleepではなくWaitOneを使用することで、
             # 待機中でも停止要求を受け取れる
-            if ($stopEvent.WaitOne(8)) {
+            if ($stopEvent.WaitOne($MoveReturnDelayMs)) {
                 break
             }
 
@@ -305,7 +323,7 @@ try {
         }
 
         # ----------------------------------------------------
-        # 60秒待機
+        # $MainIntervalSeconds 秒待機
         #
         # ただし停止要求が来たら即終了
         # ----------------------------------------------------
@@ -313,7 +331,7 @@ try {
         $waitStart = [DateTime]::Now
 
         while (
-            ([DateTime]::Now - $waitStart).TotalSeconds -lt 60
+            ([DateTime]::Now - $waitStart).TotalSeconds -lt $MainIntervalSeconds
         ) {
 
             if ($stopEvent.WaitOne(100)) {
