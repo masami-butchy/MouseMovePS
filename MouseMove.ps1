@@ -260,15 +260,10 @@ try {
         }
         while (($DX -eq 0) -and ($DY -eq 0))
 
-	    # ----------------------------------------------------
-        # 現在のマウス位置取得
-        # ----------------------------------------------------
-
-        $originalPosition = [System.Windows.Forms.Cursor]::Position
-
         # ----------------------------------------------------
         # マウス入力を発生
-        # 1回 × $MoveReturnDelayMs ms
+        # 発動毎に $MoveRepeatCount 回 実行
+        # 移動後毎に $MoveReturnDelayMs ms待機して元の位置に戻す
         # ----------------------------------------------------
 
         for ($I = 0; $I -lt $MoveRepeatCount; $I++) {
@@ -278,16 +273,13 @@ try {
                 break
             }
 
-            # 座標変更
-            $temporaryPosition = $originalPosition
-            $temporaryPosition.X += $DX
-            $temporaryPosition.Y += $DY
-
             # [debug] アイドルタイム表示
             $idle = [IdleTime]::GetIdleSeconds()
             Write-Host ("Idle: {0:N3} sec" -f $idle)
 
-            # 実際にマウスポインターを移動（マウスインプット）
+            # 実際にマウスポインターを移動
+            # 
+            # SendInputで相対マウス移動イベントを送信
             [MouseInput]::Move($DX, $DY)
 
             # $MoveReturnDelayMs ms待機
@@ -298,10 +290,12 @@ try {
                 break
             }
 
-            # 元の位置に戻す（逆方向へマウスインプット）
+            # 元の位置に戻す
+            # 
+            # SendInputで移動を打ち消す相対マウス移動イベントを送信
             [MouseInput]::Move(-$DX, -$DY)
 
-            # [debug] アイドルタイム表示
+            # [debug] 操作後アイドルタイム表示
             $idle = [IdleTime]::GetIdleSeconds()
             Write-Host ("Idle: {0:N3} sec" -f $idle)
 
