@@ -188,9 +188,14 @@ $stopEvent = New-Object System.Threading.EventWaitHandle(
 # タスクトレイアイコン
 # ============================================================
 
+# 標準の情報アイコンを読み込む
+$notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+# アイコンのパスを決定するために、スクリプトのベース名を取得
 $ScriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+# アイコンのパスを決定
 $TrayIconPath = Join-Path $PSScriptRoot ($ScriptBaseName + ".ico")
 
+# アイコンのパスが存在するか確認して、存在すれば用意されたアイコンを使用し、存在しなければWindows標準アイコンを使用
 if (Test-Path -LiteralPath $TrayIconPath) {
 
     # ps1と同じフォルダーにMouseMove.icoがある場合
@@ -202,9 +207,6 @@ else {
     # アイコンが見つからない場合はWindows標準アイコンを使用
     $notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
 }
-
-# Windows標準アイコンを使用
-$notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
 
 # マウスをアイコンに重ねた時の表示
 $notifyIcon.Text = "Mouse Move : ON"
