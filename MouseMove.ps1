@@ -36,7 +36,74 @@ public class IdleTime
 }
 "@
 
+# ============================================================
+# マウス入力送信用 SendInput API
+# ============================================================
 
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.ComponentModel;
+
+public static class MouseInput
+{
+    [StructLayout(LayoutKind.Sequential)]
+    struct INPUT
+    {
+        public uint type;
+        public MOUSEINPUT mi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    const uint INPUT_MOUSE = 0;
+    const uint MOUSEEVENTF_MOVE = 0x0001;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern uint SendInput(
+        uint nInputs,
+        INPUT[] pInputs,
+        int cbSize
+    );
+
+    public static void Move(int dx, int dy)
+    {
+        INPUT input = new INPUT();
+
+        input.type = INPUT_MOUSE;
+        input.mi.dx = dx;
+        input.mi.dy = dy;
+        input.mi.mouseData = 0;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
+        input.mi.time = 0;
+        input.mi.dwExtraInfo = IntPtr.Zero;
+
+        INPUT[] inputs = new INPUT[] { input };
+
+        uint result = SendInput(
+            1,
+            inputs,
+            Marshal.SizeOf(typeof(INPUT))
+        );
+
+        if (result == 0)
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error()
+            );
+        }
+    }
+}
+"@
 
 # ============================================================
 # 設定
