@@ -23,6 +23,9 @@ $mutexName = "Local\MouseMoveToggle_Mutex"
 # 2回目の起動時にこのイベントをセットすることで、先に起動しているスクリプトを終了させる
 $stopEventName = "Local\MouseMoveToggle_StopEvent"
 
+# タスクトレイアイコンについて
+# スクリプトと同名の.icoファイルが同じフォルダーにある場合はそれを使用する
+# .icoファイルがない場合はWindows標準の情報アイコンを使用する
 
 # ============================================================
 # 使用する.NETアセンブリ
@@ -185,7 +188,20 @@ $stopEvent = New-Object System.Threading.EventWaitHandle(
 # タスクトレイアイコン
 # ============================================================
 
-$notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+$ScriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+$TrayIconPath = Join-Path $PSScriptRoot ($ScriptBaseName + ".ico")
+
+if (Test-Path -LiteralPath $TrayIconPath) {
+
+    # ps1と同じフォルダーにMouseMove.icoがある場合
+    $notifyIcon.Icon = New-Object System.Drawing.Icon($TrayIconPath)
+
+}
+else {
+
+    # アイコンが見つからない場合はWindows標準アイコンを使用
+    $notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+}
 
 # Windows標準アイコンを使用
 $notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
