@@ -1,3 +1,41 @@
+# ============================================================
+# 設定
+# ============================================================
+
+# マウス移動を発動1回当たり何回繰り返すか
+$MoveRepeatCount = 1
+
+# 1回の移動後、元に戻すまでの待機時間（ミリ秒）
+# Default: 8ms待機(120fps表示時の1フレーム秒=8.333...ms未満)
+$MoveReturnDelayMs = 8
+
+# 次の発動までの待機時間（秒）=発動終了から次の発動までの待機時間
+$MainIntervalSeconds = 60
+
+# 1回あたりの移動量（ピクセル）
+$MovePixels = 1
+
+# 多重起動防止用のMutex名
+# 同じ名前のMutexがすでに存在する場合は、このスクリプトがすでに起動していると判定する
+$mutexName = "Local\MouseMoveToggle_Mutex"
+
+# 実行中のスクリプトへ停止要求を送るためのイベント名
+# 2回目の起動時にこのイベントをセットすることで、先に起動しているスクリプトを終了させる
+$stopEventName = "Local\MouseMoveToggle_StopEvent"
+
+# タスクトレイアイコンについて
+# スクリプトと同名の.icoファイルが同じフォルダーにある場合はそれを使用する
+# .icoファイルがない場合はWindows標準の情報アイコンを使用する
+
+# デバッグ表示（発動前後のアイドルタイム表示）
+# $true  : アイドルタイムをコンソールに表示
+# $false : デバッグ表示を無効化
+$DebugEnabled = $false
+
+# ============================================================
+# 使用する.NETアセンブリ
+# ============================================================
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -36,14 +74,74 @@ public class IdleTime
 }
 "@
 
-
-
 # ============================================================
-# 設定
+# マウス入力送信用 SendInput API
 # ============================================================
 
-$mutexName     = "Local\MouseMoveToggle_Mutex"
-$stopEventName = "Local\MouseMoveToggle_StopEvent"
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.ComponentModel;
+
+public static class MouseInput
+{
+    [StructLayout(LayoutKind.Sequential)]
+    struct INPUT
+    {
+        public uint type;
+        public MOUSEINPUT mi;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MOUSEINPUT
+    {
+        public int dx;
+        public int dy;
+        public uint mouseData;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    const uint INPUT_MOUSE = 0;
+    const uint MOUSEEVENTF_MOVE = 0x0001;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern uint SendInput(
+        uint nInputs,
+        INPUT[] pInputs,
+        int cbSize
+    );
+
+    public static void Move(int dx, int dy)
+    {
+        INPUT input = new INPUT();
+
+        input.type = INPUT_MOUSE;
+        input.mi.dx = dx;
+        input.mi.dy = dy;
+        input.mi.mouseData = 0;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
+        input.mi.time = 0;
+        input.mi.dwExtraInfo = IntPtr.Zero;
+
+        INPUT[] inputs = new INPUT[] { input };
+
+        uint result = SendInput(
+            1,
+            inputs,
+            Marshal.SizeOf(typeof(INPUT))
+        );
+
+        if (result == 0)
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error()
+            );
+        }
+    }
+}
+"@
 
 # ============================================================
 # 多重起動チェック
@@ -95,10 +193,25 @@ $stopEvent = New-Object System.Threading.EventWaitHandle(
 # タスクトレイアイコン
 # ============================================================
 
+# 標準の情報アイコンを読み込む
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+# アイコンのパスを決定するために、スクリプトのベース名を取得
+$ScriptBaseName = [System.IO.Path]::GetFileNameWithoutExtension($PSCommandPath)
+# アイコンのパスを決定
+$TrayIconPath = Join-Path $PSScriptRoot ($ScriptBaseName + ".ico")
 
-# Windows標準アイコンを使用
-$notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+# アイコンのパスが存在するか確認して、存在すれば用意されたアイコンを使用し、存在しなければWindows標準アイコンを使用
+if (Test-Path -LiteralPath $TrayIconPath) {
+
+    # ps1と同じフォルダーにMouseMove.icoがある場合
+    $notifyIcon.Icon = New-Object System.Drawing.Icon($TrayIconPath)
+
+}
+else {
+
+    # アイコンが見つからない場合はWindows標準アイコンを使用
+    $notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+}
 
 # マウスをアイコンに重ねた時の表示
 $notifyIcon.Text = "Mouse Move : ON"
@@ -165,60 +278,58 @@ try {
         # ----------------------------------------------------
         # 移動方向をランダム決定
         #
-        # -1 / 0 / 1 のどれか
+        # X方向、Y方向それぞれに "-1 / 0 / 1 のいずれかの$MovePixels倍" を設定
+        # （ただし、移動しない "X=0 かつ Y=0" は除く）
         # ----------------------------------------------------
 
         do {
-            $DX = Get-Random -Minimum -1 -Maximum 2
-            $DY = Get-Random -Minimum -1 -Maximum 2
+            $DX = (Get-Random -Minimum -1 -Maximum 2) * $MovePixels
+            $DY = (Get-Random -Minimum -1 -Maximum 2) * $MovePixels
         }
         while (($DX -eq 0) -and ($DY -eq 0))
 
-	# ----------------------------------------------------
-        # 現在のマウス位置取得
+        # ----------------------------------------------------
+        # マウス入力を発生
+        # 発動毎に $MoveRepeatCount 回 実行
+        # 移動後毎に $MoveReturnDelayMs ms待機して元の位置に戻す
         # ----------------------------------------------------
 
-        $originalPosition = [System.Windows.Forms.Cursor]::Position
-
-        # ----------------------------------------------------
-        # 1回 × 30ms
-        #
-        # 約3秒かけて少しずつ移動
-        # ----------------------------------------------------
-
-        for ($I = 0; $I -lt 1; $I++) {
+        for ($I = 0; $I -lt $MoveRepeatCount; $I++) {
 
             # 停止要求チェック
             if ($stopEvent.WaitOne(0)) {
                 break
             }
 
-            # 座標変更
-            $temporaryPosition = $originalPosition
-            $temporaryPosition.X += $DX
-            $temporaryPosition.Y += $DY
-
             # [debug] アイドルタイム表示
-            $idle = [IdleTime]::GetIdleSeconds()
-            Write-Host ("Idle: {0:N3} sec" -f $idle)
+            if ($DebugEnabled) {
+                $idle = [IdleTime]::GetIdleSeconds()
+                Write-Host ("Idle: {0:N3} sec" -f $idle)
+            }
 
             # 実際にマウスポインターを移動
-            [System.Windows.Forms.Cursor]::Position = $temporaryPosition
+            # 
+            # SendInputで相対マウス移動イベントを送信
+            [MouseInput]::Move($DX, $DY)
 
-            # 8ms待機(約120fps時の1フレーム秒)
+            # $MoveReturnDelayMs ms待機
             #
             # Start-SleepではなくWaitOneを使用することで、
             # 待機中でも停止要求を受け取れる
-            if ($stopEvent.WaitOne(8)) {
+            if ($stopEvent.WaitOne($MoveReturnDelayMs)) {
                 break
             }
 
             # 元の位置に戻す
-            [System.Windows.Forms.Cursor]::Position = $originalPosition
+            # 
+            # SendInputで移動を打ち消す相対マウス移動イベントを送信
+            [MouseInput]::Move(-$DX, -$DY)
 
-            # [debug] アイドルタイム表示
-            $idle = [IdleTime]::GetIdleSeconds()
-            Write-Host ("Idle: {0:N3} sec" -f $idle)
+            # [debug] 操作後アイドルタイム表示
+            if ($DebugEnabled) {
+                $idle = [IdleTime]::GetIdleSeconds()
+                Write-Host ("Idle: {0:N3} sec" -f $idle)
+            }
 
             # ------------------------------------------------
             # Windows Formsのイベント処理
@@ -239,7 +350,7 @@ try {
         }
 
         # ----------------------------------------------------
-        # 60秒待機
+        # $MainIntervalSeconds 秒待機
         #
         # ただし停止要求が来たら即終了
         # ----------------------------------------------------
@@ -247,7 +358,7 @@ try {
         $waitStart = [DateTime]::Now
 
         while (
-            ([DateTime]::Now - $waitStart).TotalSeconds -lt 60
+            ([DateTime]::Now - $waitStart).TotalSeconds -lt $MainIntervalSeconds
         ) {
 
             if ($stopEvent.WaitOne(100)) {
