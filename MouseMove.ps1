@@ -27,6 +27,11 @@ $stopEventName = "Local\MouseMoveToggle_StopEvent"
 # スクリプトと同名の.icoファイルが同じフォルダーにある場合はそれを使用する
 # .icoファイルがない場合はWindows標準の情報アイコンを使用する
 
+# デバッグ表示（発動前後のアイドルタイム表示）
+# $true  : アイドルタイムをコンソールに表示
+# $false : デバッグ表示を無効化
+$DebugEnabled = $false
+
 # ============================================================
 # 使用する.NETアセンブリ
 # ============================================================
@@ -297,8 +302,10 @@ try {
             }
 
             # [debug] アイドルタイム表示
-            $idle = [IdleTime]::GetIdleSeconds()
-            Write-Host ("Idle: {0:N3} sec" -f $idle)
+            if ($DebugEnabled) {
+                $idle = [IdleTime]::GetIdleSeconds()
+                Write-Host ("Idle: {0:N3} sec" -f $idle)
+            }
 
             # 実際にマウスポインターを移動
             # 
@@ -319,8 +326,10 @@ try {
             [MouseInput]::Move(-$DX, -$DY)
 
             # [debug] 操作後アイドルタイム表示
-            $idle = [IdleTime]::GetIdleSeconds()
-            Write-Host ("Idle: {0:N3} sec" -f $idle)
+            if ($DebugEnabled) {
+                $idle = [IdleTime]::GetIdleSeconds()
+                Write-Host ("Idle: {0:N3} sec" -f $idle)
+            }
 
             # ------------------------------------------------
             # Windows Formsのイベント処理
