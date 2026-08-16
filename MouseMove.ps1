@@ -248,9 +248,8 @@ try {
         $originalPosition = [System.Windows.Forms.Cursor]::Position
 
         # ----------------------------------------------------
-        # 1回 × 30ms
-        #
-        # 約3秒かけて少しずつ移動
+        # マウス入力を発生
+        # 1回 × 8ms
         # ----------------------------------------------------
 
         for ($I = 0; $I -lt 1; $I++) {
@@ -269,8 +268,8 @@ try {
             $idle = [IdleTime]::GetIdleSeconds()
             Write-Host ("Idle: {0:N3} sec" -f $idle)
 
-            # 実際にマウスポインターを移動
-            [System.Windows.Forms.Cursor]::Position = $temporaryPosition
+            # 実際にマウスポインターを移動（マウスインプット）
+            [MouseInput]::Move($DX, $DY)
 
             # 8ms待機(約120fps時の1フレーム秒)
             #
@@ -280,8 +279,8 @@ try {
                 break
             }
 
-            # 元の位置に戻す
-            [System.Windows.Forms.Cursor]::Position = $originalPosition
+            # 元の位置に戻す（逆方向へマウスインプット）
+            [MouseInput]::Move(-$DX, -$DY)
 
             # [debug] アイドルタイム表示
             $idle = [IdleTime]::GetIdleSeconds()
