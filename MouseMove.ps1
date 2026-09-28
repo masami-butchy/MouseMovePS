@@ -416,14 +416,14 @@ $ControlCheckIntervalMs =
 
 
 # スケジュールの「時間」上限は1以上とする。
-# 99999よりも大きい値を異常値とし、Defaultの最大値へ強制的に戻す。
+# 999999よりも大きい値を異常値とし、Defaultの最大値へ強制的に戻す。
 $ScheduleMaxHours =
     Resolve-IntegerSetting `
         -Name "ScheduleMaxHours" `
         -Value $ScheduleMaxHours `
         -DefaultValue $DefaultScheduleMaxHours `
         -Minimum 1 `
-        -Maximum 99999
+        -Maximum 999999
 
 # 「分」は0～59という意味を持つため、それ以外はDefaultへ戻す。
 $ScheduleMaxMinutes =
