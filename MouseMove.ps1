@@ -422,7 +422,7 @@ $ScheduleMaxHours =
         -Value $ScheduleMaxHours `
         -DefaultValue $DefaultScheduleMaxHours `
         -Minimum 1 `
-        -Maximum 999999
+        -Maximum 99999
 
 # 「分」は0～59という意味を持つため、それ以外はDefaultへ戻す。
 $ScheduleMaxMinutes =
