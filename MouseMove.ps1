@@ -555,7 +555,8 @@ $stopEventName =
 
 # Mutex名とStopEvent名は別々の名前付きオブジェクトとして使用する。
 # 同一名の場合は競合する可能性があるため、両方をDefaultへ戻す。
-if ($mutexName -eq $stopEventName) {
+# 大文字小文字を区別する比較を行うため、-ceqを使用する。
+if ($mutexName -ceq $stopEventName) {
 
     $script:SettingWarnings +=
         "mutexName と stopEventName に同じ名前 '$mutexName' が設定されています。" +
@@ -1027,6 +1028,26 @@ function Update-ScheduleStatusText {
     }
 }
 
+# ========================================================
+# 一覧番号更新
+# ========================================================
+function Update-ScheduleListNumbers {
+
+    param (
+        [object]$ListView
+    )
+
+    for (
+        $i = 0;
+        $i -lt $ListView.Items.Count;
+        $i++
+    ) {
+
+        $ListView.Items[$i].Text =
+            [string]($i + 1)
+    }
+}
+
 function Show-ScheduleDialog {
 
     # ========================================================
@@ -1226,25 +1247,24 @@ function Show-ScheduleDialog {
     $form.Controls.Add($minutesLabel)
     $form.Controls.Add($actionCombo)
 
-
     # ========================================================
-    # 一覧番号更新
+    # ダイアログ状態
     # ========================================================
+    #
+    # Show()によるモードレス表示では、
+    # Show-ScheduleDialog関数終了後もフォームが残る。
+    #
+    # 後から実行されるボタンイベントから各コントロールを
+    # 参照できるよう、必要な参照をForm.Tagへまとめて保持する。
 
-    $updateNumbers = {
-
-        for (
-            $i = 0;
-            $i -lt $listView.Items.Count;
-            $i++
-        ) {
-
-            $listView.Items[$i].Text =
-                [string]($i + 1)
+    $form.Tag =
+        [PSCustomObject]@{
+            ListView    = $listView
+            Hours       = $hours
+            Minutes     = $minutes
+            ActionCombo = $actionCombo
         }
-    }
-
-
+    
     # ========================================================
     # ステップ追加
     # ========================================================
@@ -1258,16 +1278,24 @@ function Show-ScheduleDialog {
 
     $addButton.Width = 70
 
-
     $addButton.Add_Click({
+
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        # イベントを発生させたButtonから、
+        # 所属しているFormとダイアログ状態を取得する。
+        $form = $sender.FindForm()
+        $state = $form.Tag
 
         $delay =
             New-TimeSpan `
-                -Hours ([int]$hours.Value) `
-                -Minutes ([int]$minutes.Value)
+                -Hours ([int]$state.Hours.Value) `
+                -Minutes ([int]$state.Minutes.Value)
 
-
-        switch ($actionCombo.SelectedItem) {
+        switch ($state.ActionCombo.SelectedItem) {
 
             "一時停止" {
                 $action = "Pause"
@@ -1282,19 +1310,17 @@ function Show-ScheduleDialog {
             }
         }
 
-
         $step =
             [PSCustomObject]@{
                 Delay  = $delay
                 Action = $action
             }
 
-
         $item =
             New-Object System.Windows.Forms.ListViewItem
 
         $item.Text =
-            [string]($listView.Items.Count + 1)
+            [string]($state.ListView.Items.Count + 1)
 
         $durationText =
             "{0}時間 {1}分" -f `
@@ -1311,9 +1337,8 @@ function Show-ScheduleDialog {
 
         $item.Tag = $step
 
-        [void]$listView.Items.Add($item)
+        [void]$state.ListView.Items.Add($item)
     })
-
 
     # ========================================================
     # 削除
@@ -1331,15 +1356,23 @@ function Show-ScheduleDialog {
 
     $deleteButton.Add_Click({
 
-        if ($listView.SelectedItems.Count -eq 0) {
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        $form = $sender.FindForm()
+        $state = $form.Tag
+
+        if ($state.ListView.SelectedItems.Count -eq 0) {
             return
         }
 
-        $listView.Items.Remove(
-            $listView.SelectedItems[0]
+        $state.ListView.Items.Remove(
+            $state.ListView.SelectedItems[0]
         )
 
-        & $updateNumbers
+        Update-ScheduleListNumbers -ListView $state.ListView
     })
 
 
@@ -1359,23 +1392,31 @@ function Show-ScheduleDialog {
 
     $upButton.Add_Click({
 
-        if ($listView.SelectedItems.Count -eq 0) {
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        $form = $sender.FindForm()
+        $state = $form.Tag
+
+        if ($state.ListView.SelectedItems.Count -eq 0) {
             return
         }
 
-        $item = $listView.SelectedItems[0]
+        $item = $state.ListView.SelectedItems[0]
         $index = $item.Index
 
         if ($index -le 0) {
             return
         }
 
-        $listView.Items.RemoveAt($index)
-        $listView.Items.Insert($index - 1, $item)
+        $state.ListView.Items.RemoveAt($index)
+        $state.ListView.Items.Insert($index - 1, $item)
 
         $item.Selected = $true
 
-        & $updateNumbers
+        Update-ScheduleListNumbers -ListView $state.ListView
     })
 
 
@@ -1395,26 +1436,34 @@ function Show-ScheduleDialog {
 
     $downButton.Add_Click({
 
-        if ($listView.SelectedItems.Count -eq 0) {
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        $form = $sender.FindForm()
+        $state = $form.Tag
+
+        if ($state.ListView.SelectedItems.Count -eq 0) {
             return
         }
 
-        $item = $listView.SelectedItems[0]
+        $item = $state.ListView.SelectedItems[0]
         $index = $item.Index
 
         if (
             $index -ge
-            ($listView.Items.Count - 1)
+            ($state.ListView.Items.Count - 1)
         ) {
             return
         }
 
-        $listView.Items.RemoveAt($index)
-        $listView.Items.Insert($index + 1, $item)
+        $state.ListView.Items.RemoveAt($index)
+        $state.ListView.Items.Insert($index + 1, $item)
 
         $item.Selected = $true
 
-        & $updateNumbers
+        Update-ScheduleListNumbers -ListView $state.ListView
     })
 
 
@@ -1479,9 +1528,17 @@ function Show-ScheduleDialog {
 
     $setButton.Add_Click({
 
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        $form = $sender.FindForm()
+        $state = $form.Tag
+
         $steps = @()
 
-        foreach ($item in $listView.Items) {
+        foreach ($item in $state.ListView.Items) {
             $steps += $item.Tag
         }
 
@@ -1530,7 +1587,15 @@ function Show-ScheduleDialog {
 
     $clearButton.Add_Click({
 
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        $form = $sender.FindForm()
+
         Clear-MouseMoveSchedule
+
         $form.Close()
     })
 
@@ -1552,6 +1617,14 @@ function Show-ScheduleDialog {
 
 
     $cancelButton.Add_Click({
+
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        $form = $sender.FindForm()
+
         $form.Close()
     })
 
@@ -1564,18 +1637,26 @@ function Show-ScheduleDialog {
     # フォーム終了処理
     # ========================================================
 
-    $form.Add_FormClosed(
-        ({
+    $form.Add_FormClosed({
 
-            # 閉じたフォームへの参照を残さない。
-            #
-            # 次回「スケジュール設定...」を選択した際に
-            # 新しいフォームを作成できるよう$nullへ戻す。
+        param (
+            $sender,
+            $eventArgs
+        )
+
+        # 閉じたフォームへの参照を残さない。
+        #
+        # 次回「スケジュール設定...」を選択した際に
+        # 新しいフォームを作成できるよう$nullへ戻す。
+        #
+        # 念のため、現在保持しているフォーム自身が
+        # 閉じられた場合だけ参照を解除する。
+
+        if ($sender -eq $script:ScheduleForm) {
             $script:ScheduleForm = $null
+        }
 
-        }).GetNewClosure()
-    )
-
+    })
 
     # ========================================================
     # スケジュール設定画面をモードレス表示
@@ -2019,7 +2100,7 @@ try {
             if ($stopRequested) {
                 break
             }
-            
+
             # [debug] 操作後アイドルタイム表示
             if ($DebugEnabled) {
                 $idle = [IdleTime]::GetIdleSeconds()
@@ -2125,6 +2206,10 @@ finally {
     # --------------------------------------------------------
     # 各オブジェクトを解放
     # --------------------------------------------------------
+
+    if ($null -ne $script:ScheduleForm -and -not $script:ScheduleForm.IsDisposed) {
+        $script:ScheduleForm.Close()
+    }
 
     $contextMenu.Dispose()
     $notifyIcon.Dispose()
