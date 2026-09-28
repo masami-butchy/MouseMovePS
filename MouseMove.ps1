@@ -416,6 +416,7 @@ $ControlCheckIntervalMs =
 
 
 # スケジュールの「時間」上限は1以上とする。
+# 99999よりも大きい値を異常値とし、Defaultの最大値へ強制的に戻す。
 $ScheduleMaxHours =
     Resolve-IntegerSetting `
         -Name "ScheduleMaxHours" `
@@ -2007,6 +2008,9 @@ try {
             [System.Windows.Forms.Application]::DoEvents()
 
             continue
+            Copilot は AI によって動作しているため、間違っている場合があります。出力されたものは、使用する前に慎重にレビューしてください。
+            
+            
         }
 
         # ----------------------------------------------------
